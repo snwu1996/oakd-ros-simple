@@ -9,6 +9,7 @@
 #include <vector>
 #include <fstream>
 #include <unistd.h>
+#include <chrono>
 
 ///// ROS
 #include <ros/ros.h>
@@ -139,6 +140,7 @@ class oakd_ros_class{
 
       ///// sub pub
       if (get_rgb){
+        // rgb_camera_info_pub = nh.advertise<sensor_msgs::CameraInfo>(topic_prefix+"/rgb/image_raw/camera_info", 10)
         if (get_raw)
           rgb_pub = nh.advertise<sensor_msgs::Image>(topic_prefix+"/rgb/image_raw", 10);
         if (get_compressed)
@@ -155,6 +157,7 @@ class oakd_ros_class{
         }
       }
       if (get_stereo_depth)
+        d_camerainfo_pub = nh.advertise<sensor_msgs::CameraInfo>(topic_prefix+"/depth/image_raw/camera_info", 10);
         d_pub = nh.advertise<sensor_msgs::Image>(topic_prefix+"/depth/image_raw", 10);
       if (get_pointcloud)
         pcl_pub = nh.advertise<sensor_msgs::PointCloud2>(topic_prefix+"/pointcloud", 10);
@@ -194,16 +197,19 @@ void oakd_ros_class::main_initialize(){
   if(get_rgb){
     std::shared_ptr<dai::node::ColorCamera> camRgb = pipeline.create<dai::node::ColorCamera>();
     std::shared_ptr<dai::node::XLinkOut> xoutRgb = pipeline.create<dai::node::XLinkOut>();
+    auto videoEnc = pipeline.create<dai::node::VideoEncoder>();
     xoutRgb->setStreamName("rgb");
 
     camRgb->setBoardSocket(dai::CameraBoardSocket::RGB);
-    camRgb->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
+    camRgb->setResolution(dai::ColorCameraProperties::SensorResolution::THE_4_K);
     camRgb->setColorOrder(dai::ColorCameraProperties::ColorOrder::BGR);
     camRgb->setFps(fps_rgb_yolo);
-    // camRgb->initialControl.setManualFocus(135);
     camRgb->setPreviewSize(640, 400);
     camRgb->setInterleaved(false);
-    camRgb->preview.link(xoutRgb->input);
+
+    videoEnc->setDefaultProfilePreset(camRgb->getStillSize(), camRgb->getFps(), dai::VideoEncoderProperties::Profile::MJPEG);
+    camRgb->video.link(videoEnc->input);
+    videoEnc->bitstream.link(xoutRgb->input);
     
     if(get_YOLO){
       std::shared_ptr<dai::node::ImageManip> Manipulator  = pipeline.create<dai::node::ImageManip>();

@@ -32,16 +32,18 @@ int main(int argc, char **argv)
   cout << "Laser: " << if_IR_laser_emission << " , Flood: " << if_IR_flood_emission << endl;
 
   ///// obtained data
-  cv::Mat FrameLeft, FrameRight, FrameDepth, FrameDepthColor, FrameRgb, FrameDetect;
+  cv::Mat FrameLeft, FrameRight, FrameDepth, FrameDepthColor, FrameRgb, FrameRgbDecompressed, FrameDetect;
 
   ///// for point cloud
   dai::CalibrationHandler calibData = device.readCalibration();
-  oak_handler.intrinsics=calibData.getCameraIntrinsics(dai::CameraBoardSocket::RIGHT, oak_handler.depth_width, oak_handler.depth_height);
+  oak_handler.intrinsics = calibData.getCameraIntrinsics(dai::CameraBoardSocket::RIGHT, oak_handler.depth_width, oak_handler.depth_height);
   double fx = oak_handler.intrinsics[0][0]; double cx = oak_handler.intrinsics[0][2];
   double fy = oak_handler.intrinsics[1][1]; double cy = oak_handler.intrinsics[1][2];
   
-
-
+  // to convert chrono time to ros time
+  auto rosBaseTime = ros::Time::now();
+  auto chronoBaseTime = std::chrono::steady_clock::now();
+  
   ///// threads to get each data
   std::thread imu_thread, rgb_thread, yolo_thread, stereo_thread, depth_pcl_thread;
 
@@ -86,9 +88,23 @@ int main(int argc, char **argv)
       while(ros::ok()){
         std::shared_ptr<dai::ImgFrame> inPassRgb = rgbQueue->tryGet<dai::ImgFrame>();
         if (inPassRgb != nullptr){
+          // convert frame timestamp to ros time
+          auto frameTimestampChrono = inPassRgb->getTimestamp();
+          auto elapsedTime = frameTimestampChrono - chronoBaseTime;
+          uint64_t timestampNs = rosBaseTime.toNSec() + 
+                                 std::chrono::duration_cast<std::chrono::nanoseconds>(elapsedTime).count();
+          auto currTime = rosBaseTime;
+          auto frameTimestampRos = currTime.fromNSec(timestampNs);
+          header.stamp = frameTimestampRos;
+
+          ROS_WARN("ros time now: %f", ros::Time::now().toSec());
+          ROS_WARN("frame timestamp: %f", frameTimestampRos.toSec());
           FrameRgb = inPassRgb->getCvFrame(); // important
-          header.stamp = ros::Time::now();
-          cv_bridge::CvImage bridge_rgb = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, FrameRgb);
+          // header.stamp = ros::Time::now();
+          cv::imdecode(FrameRgb, cv::IMREAD_UNCHANGED, &FrameRgbDecompressed); // important
+          // ROS_WARN("decompress: %f", (ros::Time::now() - t_start).toSec());
+
+          cv_bridge::CvImage bridge_rgb = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, FrameRgbDecompressed);
           if (oak_handler.get_raw){
             bridge_rgb.toImageMsg(oak_handler.rgb_img_msg);
             oak_handler.rgb_pub.publish(oak_handler.rgb_img_msg);
