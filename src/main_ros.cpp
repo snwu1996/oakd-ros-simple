@@ -2,6 +2,10 @@
 #include <thread>
 
 
+void frameTimeToRosTime() {
+
+}
+
 
 int main(int argc, char **argv)
 {
@@ -44,26 +48,16 @@ int main(int argc, char **argv)
   auto rosBaseTime = ros::Time::now();
   auto chronoBaseTime = std::chrono::steady_clock::now();
 
-  // get camera info out of rgb image and depth image
-  sensor_msgs::CameraInfo rgbCameraInfo;
-  vector<vector<float>> rgbIntrinsics = 
-    calibData.getCameraIntrinsics(dai::CameraBoardSocket::RGB,
-                                  oak_handler.camRgb->getVideoWidth(),
-                                  oak_handler.camRgb->getVideoHeight());
-  rgbCameraInfo.distortion_model = "rational_polynomial";
-  rgbCameraInfo.width = static_cast<uint32_t>(oak_handler.camRgb->getVideoWidth());
-  rgbCameraInfo.height = static_cast<uint32_t>(oak_handler.camRgb->getVideoHeight());
-  for(int i = 0; i < 3; i++) {
-    for(int j = 0; j < 3; j++) {
-      rgbCameraInfo.K[i*3+j] = rgbIntrinsics[i][j];
-      rgbCameraInfo.P[i*4+j] = rgbIntrinsics[i][j];
-    }
-  }
-  std::vector<float> distortionCoeff = calibData.getDistortionCoefficients(dai::CameraBoardSocket::RGB);
-  for (int i = 0; i < 8; i++) {
-    rgbCameraInfo.D.push_back(static_cast<double>(distortionCoeff[i]));
-  }
-  rgbCameraInfo.R[0] = rgbCameraInfo.R[4] = rgbCameraInfo.R[8] = 1;
+  // get camera info out of rgb image and depth image, if depth aligned == true then they are the same.
+  sensor_msgs::CameraInfo rgbCameraInfo = getCameraInfo(calibData,
+                                                        dai::CameraBoardSocket::RGB,
+                                                        oak_handler.camRgb->getVideoWidth(),
+                                                        oak_handler.camRgb->getVideoHeight());
+  sensor_msgs::CameraInfo depthCameraInfo = getCameraInfo(calibData,
+                                                          dai::CameraBoardSocket::RGB,
+                                                          oak_handler.camRgb->getVideoWidth(),
+                                                          oak_handler.camRgb->getVideoHeight());
+
 
   ///// threads to get each data
   std::thread imu_thread, rgb_thread, yolo_thread, stereo_thread, depth_pcl_thread;
@@ -109,33 +103,21 @@ int main(int argc, char **argv)
       while(ros::ok()){
         std::shared_ptr<dai::ImgFrame> inPassRgb = rgbQueue->tryGet<dai::ImgFrame>();
         if (inPassRgb != nullptr){
-          // convert frame timestamp to ros time
-          auto frameTimestampChrono = inPassRgb->getTimestamp();
-          auto elapsedTime = frameTimestampChrono - chronoBaseTime;
-          uint64_t timestampNs = rosBaseTime.toNSec() + 
-                                 std::chrono::duration_cast<std::chrono::nanoseconds>(elapsedTime).count();
-          auto currTime = rosBaseTime;
-          auto frameTimestampRos = currTime.fromNSec(timestampNs);
-          header.stamp = frameTimestampRos;
-          header.frame_id = "oakd_frame";
-          rgbCameraInfo.header = header;
-          // ROS_WARN("ros time now: %f", ros::Time::now().toSec());
-          // ROS_WARN("frame timestamp: %f", frameTimestampRos.toSec());
+          header.stamp = getFrameTime(rosBaseTime, chronoBaseTime, inPassRgb->getTimestamp());
+          header.frame_id = "oakd_rgb_frame";
           FrameRgb = inPassRgb->getCvFrame(); // important
-          // t_start =ros::Time::now();
-          cv::imdecode(FrameRgb, cv::IMREAD_UNCHANGED, &FrameRgbDecompressed); // important
-          // ROS_WARN("decompress: %f", (ros::Time::now() - t_start).toSec());
-
+          cv::imdecode(FrameRgb, cv::IMREAD_UNCHANGED, &FrameRgbDecompressed);
           cv_bridge::CvImage bridge_rgb = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, FrameRgbDecompressed);
           if (oak_handler.get_raw){
             bridge_rgb.toImageMsg(oak_handler.rgb_img_msg);
-            oak_handler.rgb_camera_info_pub.publish(rgbCameraInfo);
             oak_handler.rgb_pub.publish(oak_handler.rgb_img_msg);
           }
           if (oak_handler.get_compressed){
             bridge_rgb.toCompressedImageMsg(oak_handler.rgb_img_comp_msg);
             oak_handler.rgb_comp_pub.publish(oak_handler.rgb_img_comp_msg);
           }
+          rgbCameraInfo.header = header;
+          oak_handler.rgb_camera_info_pub.publish(rgbCameraInfo);
         }
         std::chrono::milliseconds dura(2);
         std::this_thread::sleep_for(dura);
@@ -246,11 +228,14 @@ int main(int argc, char **argv)
         std::shared_ptr<dai::ImgFrame> inPassDepth = DepthQueue->tryGet<dai::ImgFrame>();
         if (inPassDepth != nullptr){
           FrameDepth = inPassDepth->getFrame();
-          header.stamp = ros::Time::now();
+          header.stamp = getFrameTime(rosBaseTime, chronoBaseTime, inPassDepth->getTimestamp());
+          header.frame_id = "oakd_rgb_frame"; // because depth allign = true
           if (oak_handler.get_stereo_depth){
             cv_bridge::CvImage bridge_depth = cv_bridge::CvImage(header, sensor_msgs::image_encodings::TYPE_16UC1, FrameDepth);
             bridge_depth.toImageMsg(oak_handler.depth_img_msg);
+            depthCameraInfo.header = header;
             oak_handler.d_pub.publish(oak_handler.depth_img_msg);
+            oak_handler.d_camera_info_pub.publish(depthCameraInfo);
           }
           if (oak_handler.get_pointcloud){
             pcl::PointCloud<pcl::PointXYZ> depth_cvt_pcl;

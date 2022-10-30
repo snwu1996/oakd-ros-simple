@@ -53,6 +53,44 @@ sensor_msgs::PointCloud2 cloud2msg(pcl::PointCloud<pcl::PointXYZ> cloud, std::st
 }
 
 
+inline ::ros::Time getFrameTime(::ros::Time rosBaseTime,
+                         std::chrono::time_point<std::chrono::steady_clock> steadyBaseTime,
+                         std::chrono::time_point<std::chrono::steady_clock, std::chrono::steady_clock::duration> currTimePoint) {
+    auto elapsedTime = currTimePoint - steadyBaseTime;
+    uint64_t nSec = rosBaseTime.toNSec() + std::chrono::duration_cast<std::chrono::nanoseconds>(elapsedTime).count();
+    auto currTime = rosBaseTime;
+    auto rosStamp = currTime.fromNSec(nSec);
+    return rosStamp;
+}
+
+sensor_msgs::CameraInfo getCameraInfo(dai::CalibrationHandler calibData,
+                                      dai::CameraBoardSocket cameraId,
+                                      int width,
+                                      int height) {
+  sensor_msgs::CameraInfo cameraInfo;
+  
+  cameraInfo.distortion_model = "rational_polynomial";
+  cameraInfo.width = static_cast<uint32_t>(width);
+  cameraInfo.height = static_cast<uint32_t>(height);
+  
+  vector<vector<float>> intrinsics = 
+    calibData.getCameraIntrinsics(cameraId, width, height);
+  for(int i = 0; i < 3; i++) {
+    for(int j = 0; j < 3; j++) {
+      cameraInfo.K[i*3+j] = intrinsics[i][j];
+      cameraInfo.P[i*4+j] = intrinsics[i][j];
+    }
+  }
+
+  std::vector<float> distortionCoeff = calibData.getDistortionCoefficients(cameraId);
+  for (int i = 0; i < 8; i++) {
+    cameraInfo.D.push_back(static_cast<double>(distortionCoeff[i]));
+  }
+
+  cameraInfo.R[0] = cameraInfo.R[4] = cameraInfo.R[8] = 1;
+
+  return cameraInfo;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 class oakd_ros_class{
@@ -88,6 +126,7 @@ class oakd_ros_class{
 
     // We need to be able to retreive this to get calibaration data
     std::shared_ptr<dai::node::ColorCamera> camRgb;
+    std::shared_ptr<dai::node::StereoDepth> stereodepth;
 
     ///// ros and tf
     ros::NodeHandle nh;
@@ -378,16 +417,14 @@ void oakd_ros_class::main_initialize(){
   if(!get_stereo_ir && (get_stereo_depth || get_pointcloud)){
     std::shared_ptr<dai::node::MonoCamera> monoLeft     = pipeline.create<dai::node::MonoCamera>();
     std::shared_ptr<dai::node::MonoCamera> monoRight    = pipeline.create<dai::node::MonoCamera>();
-    std::shared_ptr<dai::node::StereoDepth> stereodepth = pipeline.create<dai::node::StereoDepth>();
+    stereodepth = pipeline.create<dai::node::StereoDepth>();
     std::shared_ptr<dai::node::XLinkOut> xoutDepth      = pipeline.create<dai::node::XLinkOut>();
     xoutDepth->setStreamName("depth");
 
-    // monoLeft->setResolution(dai::MonoCameraProperties::SensorResolution::THE_480_P);
-    monoLeft->setResolution(dai::MonoCameraProperties::SensorResolution::THE_400_P);
+    monoLeft->setResolution(dai::MonoCameraProperties::SensorResolution::THE_720_P);
     monoLeft->setBoardSocket(dai::CameraBoardSocket::LEFT);
     monoLeft->setFps(fps_stereo_depth);
-    // monoRight->setResolution(dai::MonoCameraProperties::SensorResolution::THE_480_P);
-    monoRight->setResolution(dai::MonoCameraProperties::SensorResolution::THE_400_P);
+    monoRight->setResolution(dai::MonoCameraProperties::SensorResolution::THE_720_P);
     monoRight->setBoardSocket(dai::CameraBoardSocket::RIGHT);
     monoRight->setFps(fps_stereo_depth);
 
@@ -396,7 +433,7 @@ void oakd_ros_class::main_initialize(){
     stereodepth->initialConfig.setLeftRightCheckThreshold(10);
     stereodepth->initialConfig.setBilateralFilterSigma(bilateral_sigma);
     stereodepth->initialConfig.setMedianFilter(dai::MedianFilter::KERNEL_7x7);
-    stereodepth->setDepthAlign(dai::CameraBoardSocket::LEFT); //default: Right
+    stereodepth->setDepthAlign(dai::CameraBoardSocket::RGB); //default: Right
     // stereodepth->setRectifyEdgeFillColor(0); // black, to better see the cutout
     stereodepth->setExtendedDisparity(false);
     stereodepth->setSubpixel(true);
