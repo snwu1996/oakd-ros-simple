@@ -43,7 +43,28 @@ int main(int argc, char **argv)
   // to convert chrono time to ros time
   auto rosBaseTime = ros::Time::now();
   auto chronoBaseTime = std::chrono::steady_clock::now();
-  
+
+  // get camera info out of rgb image and depth image
+  sensor_msgs::CameraInfo rgbCameraInfo;
+  vector<vector<float>> rgbIntrinsics = 
+    calibData.getCameraIntrinsics(dai::CameraBoardSocket::RGB,
+                                  oak_handler.camRgb->getVideoWidth(),
+                                  oak_handler.camRgb->getVideoHeight());
+  rgbCameraInfo.distortion_model = "rational_polynomial";
+  rgbCameraInfo.width = static_cast<uint32_t>(oak_handler.camRgb->getVideoWidth());
+  rgbCameraInfo.height = static_cast<uint32_t>(oak_handler.camRgb->getVideoHeight());
+  for(int i = 0; i < 3; i++) {
+    for(int j = 0; j < 3; j++) {
+      rgbCameraInfo.K[i*3+j] = rgbIntrinsics[i][j];
+      rgbCameraInfo.P[i*4+j] = rgbIntrinsics[i][j];
+    }
+  }
+  std::vector<float> distortionCoeff = calibData.getDistortionCoefficients(dai::CameraBoardSocket::RGB);
+  for (int i = 0; i < 8; i++) {
+    rgbCameraInfo.D.push_back(static_cast<double>(distortionCoeff[i]));
+  }
+  rgbCameraInfo.R[0] = rgbCameraInfo.R[4] = rgbCameraInfo.R[8] = 1;
+
   ///// threads to get each data
   std::thread imu_thread, rgb_thread, yolo_thread, stereo_thread, depth_pcl_thread;
 
@@ -96,17 +117,19 @@ int main(int argc, char **argv)
           auto currTime = rosBaseTime;
           auto frameTimestampRos = currTime.fromNSec(timestampNs);
           header.stamp = frameTimestampRos;
-
-          ROS_WARN("ros time now: %f", ros::Time::now().toSec());
-          ROS_WARN("frame timestamp: %f", frameTimestampRos.toSec());
+          header.frame_id = "oakd_frame";
+          rgbCameraInfo.header = header;
+          // ROS_WARN("ros time now: %f", ros::Time::now().toSec());
+          // ROS_WARN("frame timestamp: %f", frameTimestampRos.toSec());
           FrameRgb = inPassRgb->getCvFrame(); // important
-          // header.stamp = ros::Time::now();
+          // t_start =ros::Time::now();
           cv::imdecode(FrameRgb, cv::IMREAD_UNCHANGED, &FrameRgbDecompressed); // important
           // ROS_WARN("decompress: %f", (ros::Time::now() - t_start).toSec());
 
           cv_bridge::CvImage bridge_rgb = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, FrameRgbDecompressed);
           if (oak_handler.get_raw){
             bridge_rgb.toImageMsg(oak_handler.rgb_img_msg);
+            oak_handler.rgb_camera_info_pub.publish(rgbCameraInfo);
             oak_handler.rgb_pub.publish(oak_handler.rgb_img_msg);
           }
           if (oak_handler.get_compressed){

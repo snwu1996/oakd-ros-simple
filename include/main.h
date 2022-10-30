@@ -16,6 +16,7 @@
 #include <ros/package.h>
 #include <std_msgs/Header.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/CompressedImage.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -85,12 +86,26 @@ class oakd_ros_class{
     // PRO version IR and LED
     float IR_laser_brightness_mA, LED_illuminator_brightness_mA;
 
+    // We need to be able to retreive this to get calibaration data
+    std::shared_ptr<dai::node::ColorCamera> camRgb;
+
     ///// ros and tf
     ros::NodeHandle nh;
-    ros::Publisher imu_pub, l_pub, l_comp_pub, r_pub, r_comp_pub, rgb_pub, rgb_comp_pub, d_pub, pcl_pub, nn_pub, nn_comp_pub, nn_bbox_pub;
+    ros::Publisher imu_pub,
+                   l_pub,
+                   l_comp_pub,
+                   r_pub,
+                   r_comp_pub,
+                   rgb_pub,
+                   rgb_camera_info_pub,
+                   rgb_comp_pub,
+                   d_pub,
+                   d_camera_info_pub,
+                   pcl_pub,
+                   nn_pub,
+                   nn_comp_pub,
+                   nn_bbox_pub;
     void main_initialize();
-
-
 
     oakd_ros_class(ros::NodeHandle& n) : nh(n){
       ///// params
@@ -140,7 +155,7 @@ class oakd_ros_class{
 
       ///// sub pub
       if (get_rgb){
-        // rgb_camera_info_pub = nh.advertise<sensor_msgs::CameraInfo>(topic_prefix+"/rgb/image_raw/camera_info", 10)
+        rgb_camera_info_pub = nh.advertise<sensor_msgs::CameraInfo>(topic_prefix+"/rgb/camera_info", 10);
         if (get_raw)
           rgb_pub = nh.advertise<sensor_msgs::Image>(topic_prefix+"/rgb/image_raw", 10);
         if (get_compressed)
@@ -157,7 +172,7 @@ class oakd_ros_class{
         }
       }
       if (get_stereo_depth)
-        d_camerainfo_pub = nh.advertise<sensor_msgs::CameraInfo>(topic_prefix+"/depth/image_raw/camera_info", 10);
+        d_camera_info_pub = nh.advertise<sensor_msgs::CameraInfo>(topic_prefix+"/depth/camera_info", 10);
         d_pub = nh.advertise<sensor_msgs::Image>(topic_prefix+"/depth/image_raw", 10);
       if (get_pointcloud)
         pcl_pub = nh.advertise<sensor_msgs::PointCloud2>(topic_prefix+"/pointcloud", 10);
@@ -181,7 +196,6 @@ class oakd_ros_class{
 
 
 
-
 //////////// can be separated into .cpp source file
 void oakd_ros_class::main_initialize(){
   if (get_imu){
@@ -195,7 +209,7 @@ void oakd_ros_class::main_initialize(){
     IMU_node->out.link(xoutIMU->input);
   }
   if(get_rgb){
-    std::shared_ptr<dai::node::ColorCamera> camRgb = pipeline.create<dai::node::ColorCamera>();
+    camRgb = pipeline.create<dai::node::ColorCamera>();
     std::shared_ptr<dai::node::XLinkOut> xoutRgb = pipeline.create<dai::node::XLinkOut>();
     auto videoEnc = pipeline.create<dai::node::VideoEncoder>();
     xoutRgb->setStreamName("rgb");
@@ -210,7 +224,9 @@ void oakd_ros_class::main_initialize(){
     videoEnc->setDefaultProfilePreset(camRgb->getStillSize(), camRgb->getFps(), dai::VideoEncoderProperties::Profile::MJPEG);
     camRgb->video.link(videoEnc->input);
     videoEnc->bitstream.link(xoutRgb->input);
-    
+
+
+
     if(get_YOLO){
       std::shared_ptr<dai::node::ImageManip> Manipulator  = pipeline.create<dai::node::ImageManip>();
       std::shared_ptr<dai::node::YoloDetectionNetwork> detectionNetwork = pipeline.create<dai::node::YoloDetectionNetwork>();
