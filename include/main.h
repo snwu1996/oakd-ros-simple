@@ -250,21 +250,20 @@ void oakd_ros_class::main_initialize(){
   if(get_rgb){
     camRgb = pipeline.create<dai::node::ColorCamera>();
     std::shared_ptr<dai::node::XLinkOut> xoutRgb = pipeline.create<dai::node::XLinkOut>();
-    auto videoEnc = pipeline.create<dai::node::VideoEncoder>();
+    auto videoEncRgb = pipeline.create<dai::node::VideoEncoder>();
     xoutRgb->setStreamName("rgb");
 
     camRgb->setBoardSocket(dai::CameraBoardSocket::RGB);
-    camRgb->setResolution(dai::ColorCameraProperties::SensorResolution::THE_4_K);
+    camRgb->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
+    // camRgb->setResolution(dai::ColorCameraProperties::SensorResolution::THE_4_K);
     camRgb->setColorOrder(dai::ColorCameraProperties::ColorOrder::BGR);
     camRgb->setFps(fps_rgb_yolo);
     camRgb->setPreviewSize(640, 400);
     camRgb->setInterleaved(false);
 
-    videoEnc->setDefaultProfilePreset(camRgb->getStillSize(), camRgb->getFps(), dai::VideoEncoderProperties::Profile::MJPEG);
-    camRgb->video.link(videoEnc->input);
-    videoEnc->bitstream.link(xoutRgb->input);
-
-
+    videoEncRgb->setDefaultProfilePreset(camRgb->getStillSize(), camRgb->getFps(), dai::VideoEncoderProperties::Profile::MJPEG);
+    camRgb->video.link(videoEncRgb->input);
+    videoEncRgb->bitstream.link(xoutRgb->input);
 
     if(get_YOLO){
       std::shared_ptr<dai::node::ImageManip> Manipulator  = pipeline.create<dai::node::ImageManip>();
@@ -430,37 +429,38 @@ void oakd_ros_class::main_initialize(){
 
     stereodepth->initialConfig.setConfidenceThreshold(depth_confidence);
     stereodepth->setLeftRightCheck(true);
-    stereodepth->initialConfig.setLeftRightCheckThreshold(10);
-    stereodepth->initialConfig.setBilateralFilterSigma(bilateral_sigma);
-    stereodepth->initialConfig.setMedianFilter(dai::MedianFilter::KERNEL_7x7);
+    stereodepth->initialConfig.setLeftRightCheckThreshold(5);
+    // stereodepth->initialConfig.setLeftRightCheckThreshold(10);
+    // stereodepth->initialConfig.setBilateralFilterSigma(bilateral_sigma);
+    // stereodepth->initialConfig.setMedianFilter(dai::MedianFilter::KERNEL_7x7);
     stereodepth->setDepthAlign(dai::CameraBoardSocket::RGB); //default: Right
     // stereodepth->setRectifyEdgeFillColor(0); // black, to better see the cutout
     stereodepth->setExtendedDisparity(false);
     stereodepth->setSubpixel(true);
 
-    dai::RawStereoDepthConfig depth_config = stereodepth->initialConfig.get();
-    if (use_spatialFilter){
-      ROS_WARN("SPATIAL FILTER");
-      depth_config.postProcessing.spatialFilter.enable = true;
-      depth_config.postProcessing.spatialFilter.holeFillingRadius = spatialFilter_holefilling_radius;
-      depth_config.postProcessing.spatialFilter.numIterations = spatialFilter_iteration_num;
-      depth_config.postProcessing.spatialFilter.alpha = spatialFilter_alpha;
-      depth_config.postProcessing.spatialFilter.alpha = spatialFilter_alpha;
-    }
-    if (use_temporalFilter){
-      ROS_WARN("TEMPORAL FILTER");
-      depth_config.postProcessing.temporalFilter.enable = true;
-      depth_config.postProcessing.temporalFilter.alpha = temporalFilter_alpha;
-      depth_config.postProcessing.temporalFilter.delta = temporalFilter_delta;
-      depth_config.postProcessing.temporalFilter.persistencyMode = dai::RawStereoDepthConfig::PostProcessing::TemporalFilter::PersistencyMode::VALID_2_IN_LAST_4;
-      // depth_config.postProcessing.temporalFilter.persistencyMode = dai::RawStereoDepthConfig::PostProcessing::TemporalFilter::PersistencyMode::VALID_8_OUT_OF_8;
-    }
-    if (use_speckleFilter){
-      ROS_WARN("SPECKLE FILTER");
-      depth_config.postProcessing.speckleFilter.enable = true;
-      depth_config.postProcessing.speckleFilter.speckleRange = speckleFilter_range;
-    }
-    stereodepth->initialConfig.set(depth_config);
+    // dai::RawStereoDepthConfig depth_config = stereodepth->initialConfig.get();
+    // if (use_spatialFilter){
+    //   ROS_WARN("SPATIAL FILTER");
+    //   depth_config.postProcessing.spatialFilter.enable = true;
+    //   depth_config.postProcessing.spatialFilter.holeFillingRadius = spatialFilter_holefilling_radius;
+    //   depth_config.postProcessing.spatialFilter.numIterations = spatialFilter_iteration_num;
+    //   depth_config.postProcessing.spatialFilter.alpha = spatialFilter_alpha;
+    //   depth_config.postProcessing.spatialFilter.alpha = spatialFilter_alpha;
+    // }
+    // if (use_temporalFilter){
+    //   ROS_WARN("TEMPORAL FILTER");
+    //   depth_config.postProcessing.temporalFilter.enable = true;
+    //   depth_config.postProcessing.temporalFilter.alpha = temporalFilter_alpha;
+    //   depth_config.postProcessing.temporalFilter.delta = temporalFilter_delta;
+    //   depth_config.postProcessing.temporalFilter.persistencyMode = dai::RawStereoDepthConfig::PostProcessing::TemporalFilter::PersistencyMode::VALID_2_IN_LAST_4;
+    //   // depth_config.postProcessing.temporalFilter.persistencyMode = dai::RawStereoDepthConfig::PostProcessing::TemporalFilter::PersistencyMode::VALID_8_OUT_OF_8;
+    // }
+    // if (use_speckleFilter){
+    //   ROS_WARN("SPECKLE FILTER");
+    //   depth_config.postProcessing.speckleFilter.enable = true;
+    //   depth_config.postProcessing.speckleFilter.speckleRange = speckleFilter_range;
+    // }
+    // stereodepth->initialConfig.set(depth_config);
 
     monoLeft->out.link(stereodepth->left);
     monoRight->out.link(stereodepth->right);
@@ -470,6 +470,11 @@ void oakd_ros_class::main_initialize(){
     stereodepth->left.setQueueSize(1);
     stereodepth->right.setQueueSize(1);
     stereodepth->depth.link(xoutDepth->input);
+
+    // auto videoEncDepth = pipeline.create<dai::node::VideoEncoder>();
+    // videoEncDepth->setDefaultProfilePreset(camRgb->getStillSize(), camRgb->getFps(), dai::VideoEncoderProperties::Profile::MJPEG);
+    // stereodepth->depth.link(videoEncDepth->input);
+    // videoEncDepth->bitstream.link(xoutDepth->input);
     
     depth_width = monoRight->getResolutionWidth();
     depth_height= monoRight->getResolutionHeight();

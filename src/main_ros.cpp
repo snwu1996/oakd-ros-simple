@@ -38,7 +38,8 @@ int main(int argc, char **argv)
   ///// obtained data
   cv::Mat FrameLeft, FrameRight, FrameDepth, FrameDepthColor, FrameRgb, FrameRgbDecompressed, FrameDetect;
 
-  ///// for point cloud
+  ///// for point cloud. 
+  // Note: this does not work anymore because we depth allign the image now.
   dai::CalibrationHandler calibData = device.readCalibration();
   oak_handler.intrinsics = calibData.getCameraIntrinsics(dai::CameraBoardSocket::RIGHT, oak_handler.depth_width, oak_handler.depth_height);
   double fx = oak_handler.intrinsics[0][0]; double cx = oak_handler.intrinsics[0][2];

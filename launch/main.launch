@@ -23,15 +23,15 @@
   <param name="/pcl_min_range" value="0.3"/> <!-- [m] closer than this value will not be published -->
   <param name="/depth_confidence" value="175"/>  <!-- 0~255 -->
   <param name="/bilateral_sigma" value="5"/>  <!-- 0 ~ 65535, depth filter -->
-  <param name="/use_spatialFilter" value="true"/> 
+  <param name="/use_spatialFilter" value="false"/> 
       <param name="/spatialFilter_holefilling_radius" value="2"/> 
       <param name="/spatialFilter_iteration_num" value="1"/> 
       <param name="/spatialFilter_alpha" value="0.5"/> <!-- 0.0: infinite filter, 1.0: non-filter-->
       <param name="/spatialFilter_delta" value="20"/> 
-  <param name="/use_temporalFilter" value="true"/> 
+  <param name="/use_temporalFilter" value="false"/> 
       <param name="/temporalFilter_alpha" value="0.4"/> <!-- 0.0: infinite filter, 1.0: non-filter--> 
       <param name="/temporalFilter_delta" value="20"/> 
-  <param name="/use_speckleFilter" value="true"/> 
+  <param name="/use_speckleFilter" value="false"/> 
       <param name="/speckleFilter_range" value="200"/> 
 
   <!-- IR laser, LED illuminator for PRO version -->
