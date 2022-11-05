@@ -2,10 +2,7 @@
 #include <thread>
 
 
-void frameTimeToRosTime() {
-
-}
-
+const float MM2M = 1 / 1000.0;
 
 int main(int argc, char **argv)
 {
@@ -36,7 +33,14 @@ int main(int argc, char **argv)
   cout << "Laser: " << if_IR_laser_emission << " , Flood: " << if_IR_flood_emission << endl;
 
   ///// obtained data
-  cv::Mat FrameLeft, FrameRight, FrameDepth, FrameDepthColor, FrameRgb, FrameRgbDecompressed, FrameDetect;
+  cv::Mat FrameLeft,
+          FrameRight,
+          FrameDepth16UMillimeter,
+          FrameDepth32FMeter,
+          FrameDepthColor,
+          FrameRgb,
+          FrameRgbDecompressed,
+          FrameDetect;
 
   ///// for point cloud. 
   // Note: this does not work anymore because we depth allign the image now.
@@ -228,11 +232,15 @@ int main(int argc, char **argv)
       while(ros::ok()){
         std::shared_ptr<dai::ImgFrame> inPassDepth = DepthQueue->tryGet<dai::ImgFrame>();
         if (inPassDepth != nullptr){
-          FrameDepth = inPassDepth->getFrame();
+          FrameDepth16UMillimeter = inPassDepth->getFrame();
           header.stamp = getFrameTime(rosBaseTime, chronoBaseTime, inPassDepth->getTimestamp());
-          header.frame_id = "oakd_rgb_frame"; // because depth allign = true
+          // because depth allign = true
+          header.frame_id = "oakd_rgb_frame"; 
           if (oak_handler.get_stereo_depth){
-            cv_bridge::CvImage bridge_depth = cv_bridge::CvImage(header, sensor_msgs::image_encodings::TYPE_16UC1, FrameDepth);
+            // depth images come in as uint16, mm. We need to convert to float32, m.
+            FrameDepth16UMillimeter.convertTo(FrameDepth32FMeter, CV_32F, MM2M);
+            cv_bridge::CvImage bridge_depth = 
+              cv_bridge::CvImage(header, sensor_msgs::image_encodings::TYPE_32FC1, FrameDepth32FMeter);
             bridge_depth.toImageMsg(oak_handler.depth_img_msg);
             depthCameraInfo.header = header;
             oak_handler.d_pub.publish(oak_handler.depth_img_msg);
@@ -240,9 +248,9 @@ int main(int argc, char **argv)
           }
           if (oak_handler.get_pointcloud){
             pcl::PointCloud<pcl::PointXYZ> depth_cvt_pcl;
-            for (int i = 0; i < FrameDepth.rows; ++i){
-              for (int j = 0; j < FrameDepth.cols; ++j){
-                float temp_depth = FrameDepth.at<ushort>(i,j);
+            for (int i = 0; i < FrameDepth16UMillimeter.rows; ++i){
+              for (int j = 0; j < FrameDepth16UMillimeter.cols; ++j){
+                float temp_depth = FrameDepth16UMillimeter.at<ushort>(i,j);
                 if (temp_depth/1000.0 >= oak_handler.pcl_min_range and temp_depth/1000.0 <= oak_handler.pcl_max_range){
                   pcl::PointXYZ p3d;
                   p3d.z = (temp_depth/1000.0); //float!!! double makes error here!!! because encoding is "32FC", float
