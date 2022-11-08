@@ -109,7 +109,7 @@ int main(int argc, char **argv)
         std::shared_ptr<dai::ImgFrame> inPassRgb = rgbQueue->tryGet<dai::ImgFrame>();
         if (inPassRgb != nullptr){
           header.stamp = getFrameTime(rosBaseTime, chronoBaseTime, inPassRgb->getTimestamp());
-          header.frame_id = "oakd_rgb_frame";
+          header.frame_id = oak_handler.frame_id;
           FrameRgb = inPassRgb->getCvFrame(); // important
           cv::imdecode(FrameRgb, cv::IMREAD_UNCHANGED, &FrameRgbDecompressed);
           cv_bridge::CvImage bridge_rgb = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, FrameRgbDecompressed);
@@ -235,7 +235,7 @@ int main(int argc, char **argv)
           FrameDepth16UMillimeter = inPassDepth->getFrame();
           header.stamp = getFrameTime(rosBaseTime, chronoBaseTime, inPassDepth->getTimestamp());
           // because depth allign = true
-          header.frame_id = "oakd_rgb_frame"; 
+          header.frame_id = oak_handler.frame_id; 
           if (oak_handler.get_stereo_depth){
             // depth images come in as uint16, mm. We need to convert to float32, m.
             FrameDepth16UMillimeter.convertTo(FrameDepth32FMeter, CV_32F, MM2M);

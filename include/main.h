@@ -105,6 +105,7 @@ class oakd_ros_class{
 
     bool initialized=false;
     bool get_imu, get_stereo_ir, get_rgb, get_stereo_depth, get_YOLO, get_pointcloud, get_raw, get_compressed;
+    string frame_id;
 
     string topic_prefix, blob_file, class_file;
     int fps_IMU, infer_img_width, infer_img_height, class_num, thread_num, bilateral_sigma, depth_confidence;
@@ -149,6 +150,7 @@ class oakd_ros_class{
     oakd_ros_class(ros::NodeHandle& n) : nh(n){
       ///// params
       nh.param<std::string>("/topic_prefix", topic_prefix, "/oakd");
+      nh.param<std::string>("frame_id", frame_id, "oakd_rgb_frame");
       nh.param("/fps_rgb_yolo", fps_rgb_yolo, 30.0);
       nh.param("/fps_stereo_depth", fps_stereo_depth, 30.0);
       nh.param("/fps_IMU", fps_IMU, 200);
