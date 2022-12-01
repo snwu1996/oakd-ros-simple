@@ -102,7 +102,8 @@ int main(int argc, char **argv)
 
 
   if (oak_handler.get_rgb){
-    std::shared_ptr<dai::DataOutputQueue> rgbQueue = device.getOutputQueue("rgb", 8, false);
+    std::shared_ptr<dai::DataOutputQueue> rgbQueue = device.getOutputQueue("rgb", oak_handler.queue_size, false);
+    rgbQueue->setBlocking(oak_handler.queue_blocking);
     rgb_thread = std::thread([&]() {
       std_msgs::Header header;
       while(ros::ok()){
@@ -226,7 +227,8 @@ int main(int argc, char **argv)
 
 
   if (oak_handler.get_stereo_depth || oak_handler.get_pointcloud){
-    std::shared_ptr<dai::DataOutputQueue> DepthQueue = device.getOutputQueue("depth", 8, false);
+    std::shared_ptr<dai::DataOutputQueue> DepthQueue = device.getOutputQueue("depth", oak_handler.queue_size, false);
+    DepthQueue->setBlocking(oak_handler.queue_blocking);
     depth_pcl_thread = std::thread([&]() {
       std_msgs::Header header;
       while(ros::ok()){

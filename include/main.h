@@ -99,6 +99,9 @@ class oakd_ros_class{
 
     string path;
 
+    int queue_size;
+    bool queue_blocking;
+
     /// messages for publishing
     sensor_msgs::Image l_img_msg, r_img_msg, rgb_img_msg, depth_img_msg, nn_img_msg;
     sensor_msgs::CompressedImage l_img_comp_msg, r_img_comp_msg, rgb_img_comp_msg, nn_img_comp_msg;
@@ -157,6 +160,8 @@ class oakd_ros_class{
 
       nh.param<bool>("/get_raw", get_raw, false);
       nh.param<bool>("/get_compressed", get_compressed, false);
+      nh.param<int>("/queue_size", queue_size, 8);
+      nh.param<bool>("/queue_blocking", queue_blocking, true);
       
       nh.param<bool>("/get_imu", get_imu, false);
       nh.param<bool>("/get_rgb", get_rgb, false);
